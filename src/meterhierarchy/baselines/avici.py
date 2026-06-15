@@ -32,10 +32,12 @@ def _load(checkpoint: str, device: torch.device):
     cached = _CACHE.get(key)
     if cached is not None:
         return cached
-    payload = torch.load(checkpoint, map_location=device, weights_only=False)
+    # Always deserialize on CPU (avoids DirectML map_location issues), then move.
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
     cfg = AVICIConfig.from_dict(payload["config"])
-    model = AVICIModel(cfg).to(device)
+    model = AVICIModel(cfg)
     model.load_state_dict(payload["model_state"])
+    model.to(device)
     model.eval()
     n_samples = int(payload.get("n_samples", 400))
     _CACHE[key] = (model, n_samples, device)
@@ -59,7 +61,9 @@ def score(
         )
         return np.zeros((N, N), dtype=np.float64)
 
-    device = device or get_device()
+    # AVICI runs on CUDA/ROCm or CPU; never auto-select DirectML (unsupported ops).
+    if device is None:
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model, n_samples, dev = _load(ckpt, device)
     inp = case_to_input(data, n_samples=n_samples).to(dev)
     with torch.no_grad():

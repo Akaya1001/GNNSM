@@ -36,6 +36,7 @@ mh-train-gnn = "meterhierarchy.train_gnn:main"
 mh-train-avici = "meterhierarchy.avici.train:main"
 mh-run-baselines = "meterhierarchy.evaluate:main_baselines"
 mh-evaluate = "meterhierarchy.evaluate:main"
+mh-evaluate-real = "meterhierarchy.evaluate:main_real"
 
 [tool.setuptools.packages.find]
 where = ["src"]

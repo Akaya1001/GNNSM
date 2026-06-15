@@ -63,10 +63,19 @@ python -m pytest tests/            # or: python tests/run_all.py
 python scripts/train_gnn.py   --data data/synth --out checkpoints/gnn_ensemble.pt
 python scripts/train_avici.py --data data/synth --out checkpoints/avici.pt
 
-# 4. Evaluate the GNN + all baselines (incl. AVICI) on a dataset
+# 4. Evaluate the GNN + all baselines (incl. AVICI) on a synthetic dataset
 python scripts/run_baselines.py --data data/synth
 python scripts/evaluate.py      --data data/synth --gnn checkpoints/gnn_ensemble.pt
+
+# 5. Evaluate on the paper's REAL datasets (zero-shot transfer)
+python scripts/evaluate_real.py --data-root "<path>/RealDataClean" \
+    --datasets AMPds2,REFIT,REDD,UKDALE,RAE --baselines CL,AVICI --avici checkpoints/avici.pt --gnn checkpoints/gnn_ensemble.pt
 ```
+
+The real datasets (`RealDataClean/<name>/{consolidated.csv,hierarchy.json}`) live
+outside the repo and are loaded by `meterhierarchy.data.real_io`, which applies
+the same a-priori rooted-tree filter as the paper (RAE: `house1` only; UK-DALE:
+drop building 1).
 
 ## Repository layout
 

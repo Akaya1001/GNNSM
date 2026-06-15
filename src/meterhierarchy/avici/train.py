@@ -160,15 +160,20 @@ def run_smoke(device: Optional[torch.device] = None, log: Callable[[str], None] 
     return out
 
 
-def _load_cases_from_dir(data_dir: Path, split: str, limit: Optional[int]) -> List[dict]:
+def _load_cases_from_dir(
+    data_dir: Path, split: str, limit: Optional[int], max_meters: Optional[int] = None
+) -> List[dict]:
     from ..data.case_io import load_case, iter_case_dirs
 
     folders = iter_case_dirs(Path(data_dir) / split, limit=limit)
     cases = []
     for folder in folders:
         raw = load_case(folder)
-        if raw is not None and raw["n_meters"] >= 2:
-            cases.append({"data": raw["data"], "true_edges": raw["true_edges"]})
+        if raw is None or raw["n_meters"] < 2:
+            continue
+        if max_meters is not None and raw["n_meters"] > max_meters:
+            continue  # keep small-N cases (useful for fast CPU training)
+        cases.append({"data": raw["data"], "true_edges": raw["true_edges"]})
     return cases
 
 
@@ -176,7 +181,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     p = argparse.ArgumentParser(description="Train AVICI on the synthetic meter corpus.")
     p.add_argument("--data", type=str, default=None, help="dataset root containing a 'train' split")
     p.add_argument("--split", type=str, default="train")
-    p.add_argument("--limit", type=int, default=None, help="cap number of training cases")
+    p.add_argument("--limit", type=int, default=None, help="cap number of scanned case folders")
+    p.add_argument("--max-meters", type=int, default=None, help="skip cases with more than this many meters (faster on CPU)")
     p.add_argument("--out", type=str, default="checkpoints/avici.pt")
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--lr", type=float, default=3e-4)
@@ -196,7 +202,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     if not args.data:
         raise SystemExit("--data is required (or use --smoke). Generate one with scripts/generate_data.py")
     print(device_report())
-    cases = _load_cases_from_dir(Path(args.data), args.split, args.limit)
+    cases = _load_cases_from_dir(Path(args.data), args.split, args.limit, args.max_meters)
     print(f"loaded {len(cases)} training cases from {args.data}/{args.split}")
     if not cases:
         raise SystemExit("no cases found")
