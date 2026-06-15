@@ -1,0 +1,45 @@
+# --- Data, results, and trained weights are NEVER committed ---
+data/
+Data/
+runs/
+tmp_data/
+*.parquet
+*.pt
+*.ckpt
+*.pkl
+feature_cache/
+# result artifacts
+results*.json
+summary*.json
+*_results.json
+*_summary.json
+*.csv
+*.log
+# plots / figures output
+plots_out/
+*.pdf
+*.png
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# --- Tooling / OS ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Keep example configs and tests; keep an empty data dir placeholder if needed
+!.gitkeep

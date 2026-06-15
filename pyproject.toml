@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meterhierarchy"
+version = "0.1.0"
+description = "GNN-based meter hierarchy detection in building energy systems, with classical, optimization-based, and amortized (AVICI) baselines."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "The MeterHierarchyGNN authors" }]
+keywords = ["graph-neural-network", "meter-hierarchy", "topology-identification", "NILM", "causal-structure-learning"]
+
+# NOTE: install the PyTorch build that matches your backend SEPARATELY.
+#   ROCm (AMD):  pip install torch --index-url https://download.pytorch.org/whl/rocm6.2
+#   CUDA:        pip install torch --index-url https://download.pytorch.org/whl/cu124
+#   CPU:         pip install torch --index-url https://download.pytorch.org/whl/cpu
+# See docs/amd_rocm.md.
+dependencies = [
+    "torch>=2.2",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pandas>=2.0",
+    "pyarrow>=12.0",
+    "networkx>=3.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "matplotlib>=3.7"]
+
+[project.scripts]
+mh-generate = "meterhierarchy.data.generator:main"
+mh-train-gnn = "meterhierarchy.train_gnn:main"
+mh-train-avici = "meterhierarchy.avici.train:main"
+mh-run-baselines = "meterhierarchy.evaluate:main_baselines"
+mh-evaluate = "meterhierarchy.evaluate:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+meterhierarchy = ["../configs/*.yaml"]

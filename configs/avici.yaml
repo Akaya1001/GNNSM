@@ -1,0 +1,25 @@
+# AVICI hyperparameters (reference; CLI flags of scripts/train_avici.py default to these).
+# Faithful to Lorch et al. 2022, with a moderate training budget for this task.
+model:
+  dim: 128          # model width (k)
+  n_layers: 8       # axial-attention blocks (L)
+  n_heads: 8
+  ffn_dim: 512
+  dropout: 0.1
+  in_channels: 2    # [standardized value, intervention indicator]
+
+train:
+  epochs: 30        # moderate budget; increase for a stronger baseline
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  n_samples: 400    # timesteps subsampled per case as AVICI "observations"
+  warmup_steps: 50
+  grad_clip: 1.0
+
+smoke:              # tiny config used by --smoke (CPU-friendly)
+  dim: 32
+  n_layers: 2
+  n_heads: 2
+  ffn_dim: 64
+  epochs: 40
+  n_samples: 64
