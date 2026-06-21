@@ -161,7 +161,11 @@ def run_smoke(device: Optional[torch.device] = None, log: Callable[[str], None] 
 
 
 def _load_cases_from_dir(
-    data_dir: Path, split: str, limit: Optional[int], max_meters: Optional[int] = None
+    data_dir: Path,
+    split: str,
+    limit: Optional[int],
+    max_meters: Optional[int] = None,
+    cap_timesteps: Optional[int] = None,
 ) -> List[dict]:
     from ..data.case_io import load_case, iter_case_dirs
 
@@ -173,7 +177,13 @@ def _load_cases_from_dir(
             continue
         if max_meters is not None and raw["n_meters"] > max_meters:
             continue  # keep small-N cases (useful for fast CPU training)
-        cases.append({"data": raw["data"], "true_edges": raw["true_edges"]})
+        data = raw["data"]
+        # Cap the per-case series length at load to bound RAM (the full year-long
+        # series would otherwise be held for every case across all epochs).
+        if cap_timesteps is not None and data.shape[0] > cap_timesteps:
+            idx = np.unique(np.linspace(0, data.shape[0] - 1, cap_timesteps).round().astype(int))
+            data = data[idx]
+        cases.append({"data": data.astype(np.float32), "true_edges": raw["true_edges"]})
     return cases
 
 
@@ -183,6 +193,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--split", type=str, default="train")
     p.add_argument("--limit", type=int, default=None, help="cap number of scanned case folders")
     p.add_argument("--max-meters", type=int, default=None, help="skip cases with more than this many meters (faster on CPU)")
+    p.add_argument("--cap-timesteps", type=int, default=None, help="subsample each case to at most this many timesteps at load (saves RAM)")
     p.add_argument("--out", type=str, default="checkpoints/avici.pt")
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--lr", type=float, default=3e-4)
@@ -202,7 +213,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     if not args.data:
         raise SystemExit("--data is required (or use --smoke). Generate one with scripts/generate_data.py")
     print(device_report())
-    cases = _load_cases_from_dir(Path(args.data), args.split, args.limit, args.max_meters)
+    cases = _load_cases_from_dir(Path(args.data), args.split, args.limit, args.max_meters, args.cap_timesteps)
     print(f"loaded {len(cases)} training cases from {args.data}/{args.split}")
     if not cases:
         raise SystemExit("no cases found")
