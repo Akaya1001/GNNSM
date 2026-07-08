@@ -1,0 +1,43 @@
+# Reference config for scripts/pipeline.py (read with the stdlib tomllib).
+# Comment out what you do not need; stages always run generate -> train -> evaluate.
+
+[run]
+stages  = ["generate", "train", "evaluate"]  # any subset
+methods = ["GNN", "CL", "PC", "AVICI"]       # "all" = GNN + every baseline
+device  = "auto"                             # auto | cuda | dml | cpu
+
+[data]
+source = "synthetic"     # synthetic | real
+path   = "data/synth"    # corpus root: written by generate, read by train/evaluate
+split  = "test"          # evaluation split (synthetic; falls back to val/train)
+# limit = 100            # cap evaluated cases for quick runs
+
+# Used when source = "real" (zero-shot transfer: train stays on [data].path).
+[data.real]
+root     = "path/to/RealDataClean"
+datasets = ["AMPds2", "REFIT", "REDD", "UKDALE", "RAE"]
+max_rows = 4000          # -1 = full series (evenly subsampled to 5000)
+
+[generate]
+n    = 200               # train cases (val/test derived from split_ratio)
+seed = 42
+# split_ratio = "70,15,15"
+
+[train.gnn]
+out      = "checkpoints/gnn_ensemble.pt"
+epochs   = 150
+patience = 20
+
+[train.avici]
+out    = "checkpoints/avici.pt"
+epochs = 25
+dim    = 96
+layers = 6
+heads  = 6
+# n_samples     = 256
+# max_meters    = 64    # skip larger cases (faster on CPU)
+# cap_timesteps = 2000  # bound RAM on long series
+
+[output]
+# summary   = "results/pipeline_summary.json"
+# latex_dir = "results/latex"   # real data only: LaTeX table + TikZ bar chart

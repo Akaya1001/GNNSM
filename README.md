@@ -79,6 +79,20 @@ lives in `meterhierarchy.data.real_io.DATASETS`. The loader applies the same
 a-priori rooted-tree filter as the paper (RAE: `house1` only; UK-DALE: drop
 building 1).
 
+### One-command pipeline
+
+Steps 1-5 can also be driven by a single TOML config that selects the stages
+(`generate`, `train`, `evaluate`), the methods to compare, and the data source
+(synthetic or real):
+
+```bash
+python scripts/pipeline.py --config configs/pipeline.toml
+```
+
+See [`configs/pipeline.toml`](configs/pipeline.toml) for the annotated
+reference config (e.g. train on the synthetic corpus, then evaluate zero-shot
+on the real datasets by setting `source = "real"`).
+
 ## Repository layout
 
 ```
@@ -90,7 +104,7 @@ src/meterhierarchy/
   avici/        the AVICI model, its data adapter, and training loop
   utils/        device selection + metrics
 scripts/        thin CLI wrappers
-configs/        reference YAML of the training defaults (not read by code)
+configs/        pipeline.toml (read by scripts/pipeline.py) + reference YAML of the training defaults
 tests/          smoke + unit tests (runnable with or without pytest)
 docs/           architecture, baselines, data format, AMD/ROCm notes
 ```

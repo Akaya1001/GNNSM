@@ -7,7 +7,7 @@ name = "meterhierarchy"
 version = "0.1.0"
 description = "GNN-based meter hierarchy detection in building energy systems, with classical, optimization-based, and amortized (AVICI) baselines."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "The MeterHierarchyGNN authors" }]
 keywords = ["graph-neural-network", "meter-hierarchy", "topology-identification", "NILM", "causal-structure-learning"]
@@ -36,6 +36,7 @@ mh-train-avici = "meterhierarchy.avici.train:main"
 mh-run-baselines = "meterhierarchy.evaluate:main_baselines"
 mh-evaluate = "meterhierarchy.evaluate:main"
 mh-evaluate-real = "meterhierarchy.evaluate:main_real"
+mh-pipeline = "meterhierarchy.pipeline:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
