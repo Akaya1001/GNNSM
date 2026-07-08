@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import argparse
 import time
+import warnings
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
+
+# Torch-internal SequentialLR warning at the warmup-milestone crossing; not caused by this code.
+warnings.filterwarnings("ignore", message="The epoch parameter in", category=UserWarning)
 
 from .model.gnn import TwoPassGNN
 from .model.decode import find_best_tree

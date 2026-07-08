@@ -50,9 +50,9 @@ as a differentiable regularizer with linear warmup.
 
 ## 8. Two-pass wrapper (`TwoPassGNN`)
 A small first pass produces preliminary edge logits; **6 latent edge features**
-(asymmetry, cycle indicator, child/parent competition, row z-score) are derived
-from them and concatenated with the 58 features for a deeper second pass that
-emits the final logits.
+(raw probability, asymmetry, cycle indicator, child/parent competition, row
+z-score) are derived from them and concatenated with the 58 features for a
+deeper second pass that emits the final logits.
 
 ## 9. Training (`train_gnn.py`)
 Loss = masked BCE on edge logits (dynamic `pos_weight` for the `O(N)` vs `O(N²)`

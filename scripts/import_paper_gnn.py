@@ -11,7 +11,7 @@ normalization statistics averaged across the inputs (they are near-identical
 across seeds drawn from the same synthetic generator).
 
 Example:
-  python scripts/import_paper_gnn.py "<...>/runs/Housing/RUN_0*/GNNv2_ensemble.pt" \
+  python scripts/import_paper_gnn.py "<...>/RUN_0*/GNNv2_ensemble.pt" \
       --out checkpoints/gnn_ensemble.pt
 """
 import argparse

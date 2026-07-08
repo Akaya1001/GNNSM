@@ -24,7 +24,6 @@ dependencies = [
     "pandas>=2.0",
     "pyarrow>=12.0",
     "networkx>=3.0",
-    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +39,3 @@ mh-evaluate-real = "meterhierarchy.evaluate:main_real"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-data]
-meterhierarchy = ["../configs/*.yaml"]

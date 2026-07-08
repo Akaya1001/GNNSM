@@ -6,7 +6,8 @@ Produces, from a ``(T, N)`` consumption matrix:
 * ``(N, 15)`` per-meter node features,
 * ``(N, k)`` Laplacian positional encodings.
 
-Fully vectorized NumPy (no Python loops over ``(i, j)`` pairs).
+Mostly vectorized NumPy; mutual information uses a binned loop over
+``(i, j)`` pairs.
 """
 from __future__ import annotations
 
@@ -166,12 +167,9 @@ def compute_pair_features_fast(data: np.ndarray) -> tuple:
 
     abs_means = np.abs(data).mean(axis=0)
     stds = data.std(axis=0) + EPS
-    means = data.mean(axis=0)
 
     q25 = np.percentile(data, 25, axis=0)
     q75 = np.percentile(data, 75, axis=0)
-    q05 = np.percentile(data, 5, axis=0)
-    q95 = np.percentile(data, 95, axis=0)
     iqr = q75 - q25 + EPS
     medians = np.median(data, axis=0)
 
@@ -221,8 +219,8 @@ def compute_pair_features_fast(data: np.ndarray) -> tuple:
     spearman_abs = _vec_spearman(abs_data)
     mad_mat = np.abs(data_ds[:, :, None] - data_ds[:, None, :]).mean(axis=0)
 
-    mi_col = abs_means[:, None]
-    mi_row = abs_means[None, :]
+    mean_col = abs_means[:, None]
+    mean_row = abs_means[None, :]
     si_col = stds[:, None]
     si_row = stds[None, :]
     iqr_col = iqr[:, None]
@@ -236,9 +234,9 @@ def compute_pair_features_fast(data: np.ndarray) -> tuple:
     # 2: correlation asymmetry (0 for symmetric corr; kept for schema)
     feat_cube[:, :, 2] = 0.0
     # 3-5: mean ratio features
-    feat_cube[:, :, 3] = mi_col / (mi_row + EPS)
-    feat_cube[:, :, 4] = mi_row - mi_col
-    feat_cube[:, :, 5] = mi_col + mi_row
+    feat_cube[:, :, 3] = mean_col / (mean_row + EPS)
+    feat_cube[:, :, 4] = mean_row - mean_col
+    feat_cube[:, :, 5] = mean_col + mean_row
     # 6-7: diff correlation
     feat_cube[:, :, 6] = corr_diff
     feat_cube[:, :, 7] = np.abs(corr_diff)
@@ -257,19 +255,19 @@ def compute_pair_features_fast(data: np.ndarray) -> tuple:
     feat_cube[:, :, 16] = daily_corr
     feat_cube[:, :, 17] = daily_corr.T
     # 18-19: relative magnitude
-    feat_cube[:, :, 18] = mi_col / (mi_row + mi_col + EPS)
-    feat_cube[:, :, 19] = np.log(mi_col / (mi_row + EPS) + EPS)
+    feat_cube[:, :, 18] = mean_col / (mean_row + mean_col + EPS)
+    feat_cube[:, :, 19] = np.log(mean_col / (mean_row + EPS) + EPS)
     # 20: sum
-    feat_cube[:, :, 20] = mi_col + mi_row
+    feat_cube[:, :, 20] = mean_col + mean_row
     # 21-23: cross-statistics
-    feat_cube[:, :, 21] = mi_col * mi_row
-    feat_cube[:, :, 22] = np.minimum(mi_col, mi_row) / (np.maximum(mi_col, mi_row) + EPS)
-    feat_cube[:, :, 23] = np.maximum(mi_col, mi_row)
+    feat_cube[:, :, 21] = mean_col * mean_row
+    feat_cube[:, :, 22] = np.minimum(mean_col, mean_row) / (np.maximum(mean_col, mean_row) + EPS)
+    feat_cube[:, :, 23] = np.maximum(mean_col, mean_row)
     # 24-26: Spearman
     feat_cube[:, :, 24] = spearman
     feat_cube[:, :, 25] = np.abs(spearman)
     feat_cube[:, :, 26] = np.maximum(np.abs(spearman), feat_cube[:, :, 8])
-    # 27: residual correlation
+    # 27: diff correlation (duplicate of 6, kept for schema compatibility)
     feat_cube[:, :, 27] = corr_diff
     # 28-29: sign consistency
     feat_cube[:, :, 28] = sign_agree
@@ -317,8 +315,8 @@ def compute_pair_features_fast(data: np.ndarray) -> tuple:
     # 55: mean absolute difference
     feat_cube[:, :, 55] = mad_mat
     # 56-57: asymmetric magnitude
-    feat_cube[:, :, 56] = mi_row - mi_col
-    feat_cube[:, :, 57] = (mi_col ** 2 + mi_row ** 2) / (mi_col + mi_row + EPS)
+    feat_cube[:, :, 56] = mean_row - mean_col
+    feat_cube[:, :, 57] = (mean_col ** 2 + mean_row ** 2) / (mean_col + mean_row + EPS)
 
     feat_cube = np.nan_to_num(feat_cube, nan=0.0, posinf=1e6, neginf=-1e6)
     return feat_cube, abs_means, corr_raw

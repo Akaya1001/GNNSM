@@ -14,7 +14,6 @@ from typing import Callable, Dict, List, Optional
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 from ..utils.device import get_device, device_report

@@ -1,8 +1,10 @@
 # --- Data, results, and trained weights are NEVER committed ---
-data/
-Data/
-runs/
-tmp_data/
+# (anchored to the repo root so src/meterhierarchy/data is NOT ignored)
+/data/
+/Data/
+/runs/
+/tmp_data/
+/checkpoints/
 *.parquet
 *.pt
 *.ckpt
@@ -40,6 +42,3 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
-
-# Keep example configs and tests; keep an empty data dir placeholder if needed
-!.gitkeep

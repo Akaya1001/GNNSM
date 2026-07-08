@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -45,6 +46,16 @@ def _mean(xs: List[float]) -> float:
     return float(np.mean(xs)) if xs else 0.0
 
 
+_warned_methods = set()
+
+
+def _warn_scorer_failure(method: str, e: Exception) -> None:
+    """Warn once per method when its scorer raises (F1 falls back to 0.0)."""
+    if method not in _warned_methods:
+        _warned_methods.add(method)
+        print(f"[warn] {method} scorer failed: {type(e).__name__}: {e} (reporting F1=0.0)", file=sys.stderr)
+
+
 def evaluate(
     data_dir: Path,
     split: str,
@@ -78,7 +89,8 @@ def evaluate(
             try:
                 S = scorer(raw["data"])
                 f1, _, _ = evaluate_f1(find_best_tree(raw["n_meters"], S), raw["true_edges"])
-            except Exception:
+            except Exception as e:
+                _warn_scorer_failure(name, e)
                 f1 = 0.0
             f1s.append(f1)
         results[name] = f1s
@@ -190,7 +202,8 @@ def evaluate_real(
                     else:
                         S = get_scorer(m)(b["data"])
                     f1, _, _ = evaluate_f1(find_best_tree(N, S), b["true_edges"])
-                except Exception:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001
+                    _warn_scorer_failure(m, e)
                     f1 = 0.0
                 f1s.append(f1)
             table[m][name] = _mean(f1s)

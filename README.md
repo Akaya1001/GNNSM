@@ -59,7 +59,7 @@ python scripts/generate_data.py --n 200 --out data/synth --seed 42
 python scripts/train_avici.py --smoke
 python -m pytest tests/            # or: python tests/run_all.py
 
-# 3. Train (hyperparameter defaults match configs/*.yaml)
+# 3. Train (configs/*.yaml document the built-in defaults; they are not read by code)
 python scripts/train_gnn.py   --data data/synth --out checkpoints/gnn_ensemble.pt
 python scripts/train_avici.py --data data/synth --out checkpoints/avici.pt
 
@@ -72,10 +72,12 @@ python scripts/evaluate_real.py --data-root "<path>/RealDataClean" \
     --datasets AMPds2,REFIT,REDD,UKDALE,RAE --baselines CL,AVICI --avici checkpoints/avici.pt --gnn checkpoints/gnn_ensemble.pt
 ```
 
-The real datasets (`RealDataClean/<name>/{consolidated.csv,hierarchy.json}`) live
-outside the repo and are loaded by `meterhierarchy.data.real_io`, which applies
-the same a-priori rooted-tree filter as the paper (RAE: `house1` only; UK-DALE:
-drop building 1).
+The real datasets live outside the repo in numbered folders, e.g.
+`RealDataClean/07_AMPds2/{consolidated.csv,hierarchy.json}` (`06_REFIT`,
+`19_REDD`, `18_UKDALE`, `09_RAE`, `08_PRECON`); the short-name → folder mapping
+lives in `meterhierarchy.data.real_io.DATASETS`. The loader applies the same
+a-priori rooted-tree filter as the paper (RAE: `house1` only; UK-DALE: drop
+building 1).
 
 ## Repository layout
 
@@ -88,7 +90,7 @@ src/meterhierarchy/
   avici/        the AVICI model, its data adapter, and training loop
   utils/        device selection + metrics
 scripts/        thin CLI wrappers
-configs/        YAML hyperparameters (GNN ensemble, AVICI)
+configs/        reference YAML of the training defaults (not read by code)
 tests/          smoke + unit tests (runnable with or without pytest)
 docs/           architecture, baselines, data format, AMD/ROCm notes
 ```

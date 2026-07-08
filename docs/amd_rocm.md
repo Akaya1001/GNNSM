@@ -1,7 +1,8 @@
 # Running on AMD GPUs (ROCm), and other backends
 
-All compute device selection goes through `meterhierarchy.utils.device.get_device()`,
-which resolves in this order: **CUDA/ROCm → DirectML → CPU**. The model code is
+All compute device selection goes through `meterhierarchy.utils.device.get_device()`.
+`auto` resolves **CUDA/ROCm → CPU**; DirectML is never auto-selected and must be
+requested explicitly with `--device dml` (see below for why). The model code is
 backend-agnostic; no `.cuda()` calls are hardcoded.
 
 Check what you have:
@@ -44,11 +45,13 @@ python tests/run_all.py
 
 ## DirectML (Windows + AMD, `torch-directml`) — limited
 
-`torch-directml` is auto-detected as a fallback, but it currently lacks several
-operators this project relies on (advanced/boolean indexing, some attention
-shapes). The AVICI loss was written with mask-multiplies to avoid boolean
-indexing, but full training/inference is **not reliable on DirectML** today.
-**Use ROCm or CPU.** If you only have DirectML, run on CPU (`--device cpu`).
+`torch-directml` currently lacks several operators this project relies on
+(`aten::eye` on-device, advanced/boolean indexing, some attention shapes), so
+`auto` never selects it — otherwise every training command would crash on
+machines that merely have the package installed. The AVICI loss was written
+with mask-multiplies to avoid boolean indexing, but full training/inference is
+**not reliable on DirectML** today. **Use ROCm or CPU.** `--device dml` remains
+available as an explicit opt-in for experimentation.
 
 ## Notes
 

@@ -21,7 +21,6 @@ import torch
 
 from ..avici.model import AVICIConfig, AVICIModel
 from ..avici.data import case_to_input
-from ..utils.device import get_device
 
 _DEFAULT_CKPT = "checkpoints/avici.pt"
 _CACHE: dict = {}  # checkpoint path -> (model, n_samples, device)

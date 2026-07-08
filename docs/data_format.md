@@ -43,7 +43,8 @@ The loader builds the ground-truth edge set from `meters[].parent_id`
 (`(parent_index, child_index)` tuples). `approx_sum_children_equals_parent`
 flags whether the hierarchy is additive (parent ≈ sum of children) or has a
 hidden/unmetered load; it drives the non-additive case weighting and the latent
-head during training.
+head during training. The shipped generator always writes `false`: every
+synthetic case carries a hidden load.
 
 ## In-memory representation
 

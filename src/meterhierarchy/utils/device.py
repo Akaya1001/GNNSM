@@ -2,9 +2,9 @@
 
 PyTorch's ROCm build (AMD GPUs) exposes the *same* ``torch.cuda`` API as the
 CUDA build, so ``torch.cuda.is_available()`` returns ``True`` on a working ROCm
-install and no special handling is required. On native Windows the AMD path is
-usually ``torch-directml`` instead, which is detected as a fallback. Everything
-degrades gracefully to CPU.
+install and no special handling is required. ``"auto"`` resolves to CUDA/ROCm
+or CPU only; DirectML must be requested explicitly (``"dml"``) because it lacks
+ops these models need (e.g. ``aten::eye`` on-device) and would crash mid-run.
 """
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ def get_device(prefer: str = "auto") -> torch.device:
 
     Args:
         prefer: ``"auto"`` (default), ``"cuda"`` (CUDA or ROCm), ``"dml"``
-            (DirectML / Windows AMD) or ``"cpu"``.
+            (DirectML / Windows AMD; explicit opt-in only) or ``"cpu"``.
 
-    Resolution order for ``"auto"``: CUDA/ROCm -> DirectML -> CPU.
+    Resolution order for ``"auto"``: CUDA/ROCm -> CPU.
     """
     prefer = prefer.lower()
     if prefer == "cpu":
@@ -28,8 +28,9 @@ def get_device(prefer: str = "auto") -> torch.device:
     if prefer in ("auto", "cuda") and torch.cuda.is_available():
         return torch.device("cuda")
 
-    # Optional DirectML backend (native Windows + AMD).
-    if prefer in ("auto", "dml"):
+    # DirectML only on explicit request: its op coverage is too incomplete for
+    # these models, so "auto" must never silently select it.
+    if prefer == "dml":
         try:
             import torch_directml  # type: ignore
 
