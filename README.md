@@ -93,6 +93,15 @@ See [`configs/pipeline.toml`](configs/pipeline.toml) for the annotated
 reference config (e.g. train on the synthetic corpus, then evaluate zero-shot
 on the real datasets by setting `source = "real"`).
 
+### Predict on your own data (inference only)
+
+To apply a trained ensemble to a raw meter CSV (one time column, one column per
+meter) and print the predicted parent-child hierarchy, no ground truth needed:
+
+```bash
+python scripts/predict.py --gnn checkpoints/gnn_ensemble.pt --csv my_meters.csv --out tree.json
+```
+
 ## Repository layout
 
 ```

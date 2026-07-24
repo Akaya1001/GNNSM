@@ -12,6 +12,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 import test_decode
 import test_baselines
 import test_pipeline
+import test_predict
 import test_smoke_avici
 import test_smoke_gnn
 
@@ -22,6 +23,7 @@ CASES = [
     ("pipeline/methods", test_pipeline.test_methods_expansion_and_validation),
     ("pipeline/checkpoints", test_pipeline.test_checkpoint_paths_follow_train_out),
     ("pipeline/data_path", test_pipeline.test_missing_data_path_raises),
+    ("predict/csv_parsing", test_predict.test_load_meter_csv_drops_time_and_constant),
     ("avici/smoke_cpu", test_smoke_avici.test_avici_smoke_cpu),
     ("gnn/train_save_reload", test_smoke_gnn.test_gnn_train_save_reload),
 ]

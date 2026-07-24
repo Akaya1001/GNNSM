@@ -37,6 +37,7 @@ mh-run-baselines = "meterhierarchy.evaluate:main_baselines"
 mh-evaluate = "meterhierarchy.evaluate:main"
 mh-evaluate-real = "meterhierarchy.evaluate:main_real"
 mh-pipeline = "meterhierarchy.pipeline:main"
+mh-predict = "meterhierarchy.predict:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
