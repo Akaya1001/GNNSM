@@ -126,8 +126,9 @@ def stage_evaluate(cfg: Dict, methods: List[str], device) -> Dict:
         r = cfg.get("data", {}).get("real", {})
         if not r.get("root"):
             raise SystemExit("[data.real].root is required when source = 'real'")
-        datasets = list(r.get("datasets", ["AMPds2", "REFIT", "REDD", "UKDALE", "RAE"]))
-        max_rows = r.get("max_rows", 4000)
+        from .data.real_io import BENCHMARK
+        datasets = list(r.get("datasets", BENCHMARK))
+        max_rows = r.get("max_rows", -1)
         table = evaluate_real(Path(r["root"]), datasets, gnn_ckpt, baselines, device,
                               None if max_rows < 0 else max_rows)
         latex_dir = cfg.get("output", {}).get("latex_dir")

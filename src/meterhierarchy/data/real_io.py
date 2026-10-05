@@ -7,8 +7,9 @@ Each real dataset lives in a folder containing two files:
   and one numeric column per meter. Meter columns are named by meter id.
 * ``hierarchy.json`` -- the parent/child topology, in one of several shapes.
 
-The public entry point is :func:`load_real_buildings`, which returns one dict
-per building::
+The public entry point is :func:`load_real_dataset` (by short dataset name);
+:func:`load_real_buildings` is the generic loader for a dataset folder. Both
+return one dict per building::
 
     {
         "dataset":    str,                 # short dataset name (e.g. "REDD")
@@ -22,13 +23,32 @@ The returned ``data`` / ``names`` / ``true_edges`` triplet matches exactly what
 :func:`case_io.load_case` yields, so real buildings can be fed straight into the
 same edge scorers as the synthetic data.
 
+The seven datasets of the paper's real-world benchmark (:data:`BENCHMARK`) are
+loaded by dataset-specific parsers that reproduce the paper's protocol (Sec. 5.1.2,
+Table 11): one case per building, rooted at its physical whole-house meter with
+at least three sub-meters (N >= 4); series longer than :data:`TARGET_T` samples
+are evenly subsampled; constant sensors are dropped. Dataset rules:
+
+* UK-DALE: all five buildings; the duplicate whole-house (sound-card) meter that
+  the metadata lists as a child of the mains in buildings 1, 2 and 5 is removed.
+* UCI Power: root ``Global_active_power`` (kW -> W), children
+  ``Sub_metering_1..3`` (Wh per minute -> W); the computed ``remainder`` is not
+  a meter and is not used.
+* Plegma: houses with at least three sub-meters whose mean sum does not exceed
+  the mean aggregate (houses 1, 3, 4, 7 and 11).
+* RAE is not part of the benchmark: its mains is computed as the sum of its
+  circuits (``house1.txt``: "Sub-meter Mains: calc").
+
+Other datasets fall back to the generic hierarchy-driven loader
+:func:`load_real_buildings`.
+
 Only the standard library, numpy and pandas are used.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import AbstractSet, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
@@ -41,13 +61,19 @@ DATASETS: Dict[str, str] = {
     "REFIT": "06_REFIT",
     "REDD": "19_REDD",
     "UKDALE": "18_UKDALE",
-    "RAE": "09_RAE",
     "PRECON": "08_PRECON",
+    "UCIPower": "05_UCI_Power",
+    "Plegma": "10_Plegma",
+    "RAE": "09_RAE",  # loadable, but excluded from the benchmark (computed mains)
 }
 
-# Maximum number of (evenly spaced) rows kept when the CSV is large and the
-# caller did not cap it via ``max_rows``.
-_SUBSAMPLE_CAP = 5000
+# The paper's real-world benchmark (Table 11), in table order.
+BENCHMARK: List[str] = ["AMPds2", "REFIT", "REDD", "UKDALE", "PRECON", "UCIPower", "Plegma"]
+
+# Series longer than this are evenly subsampled (the length of one synthetic
+# training case: one year at 15-min resolution).
+TARGET_T = 35040
+_SUBSAMPLE_CAP = TARGET_T
 
 # Column-name fragments that identify the (non-meter) time axis. Matched case
 # insensitively; ``timestamp_houseN`` columns (REFIT) are caught by the prefix
@@ -205,6 +231,154 @@ def _read_consolidated(csv_path: Path, max_rows: Optional[int]) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- #
+# Benchmark parsers (paper protocol)
+# --------------------------------------------------------------------------- #
+# UK-DALE metadata lists a second whole-house meter (the sound-card power meter,
+# correlation 0.99 with the mains) as a child of the mains in buildings 1, 2, 5.
+_UKDALE_DUPLICATE_MAINS = {"mains_second_phase", "main_house_meter_second_phase", "main_site_meter"}
+_MIN_METERS = 3      # a case needs at least three non-constant meters
+_PLEGMA_MIN_SUB = 3  # Plegma: at least three sub-meters (N >= 4)
+
+
+def _even_index(n: int, target: int) -> np.ndarray:
+    """``target`` evenly spaced row indices out of ``n`` (as in the paper)."""
+    return np.linspace(0, n - 1, target).astype(np.int64)
+
+
+def _read_numeric(csv_path: Path, max_rows: Optional[int], usecols=None) -> pd.DataFrame:
+    """Read a CSV and coerce every non-time column to float (NaN on failure)."""
+    df = pd.read_csv(csv_path, nrows=max_rows, usecols=usecols, low_memory=False)
+    df.columns = [_clean_id(c) for c in df.columns]
+    for c in df.columns:
+        if not _is_time_column(c):
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df
+
+
+def _hierarchy(dataset_dir: Path) -> dict:
+    """The dataset's node map ``{meter_id: {"children": [...], ...}}``. A REFIT
+    file without an explicit ``hierarchy`` gets the implicit tree of its labels."""
+    payload = json.loads((dataset_dir / "hierarchy.json").read_text(encoding="utf-8"))
+    hierarchy = payload.get("hierarchy")
+    if isinstance(hierarchy, dict) and hierarchy:
+        return hierarchy
+    return {parent: {"children": kids} for parent, kids in _implicit_refit_edges(payload).items()}
+
+
+def _children(node: dict) -> List[str]:
+    return _children_ids(node) if isinstance(node, dict) else []
+
+
+def _build_case(dataset: str, building: str, df: pd.DataFrame, cols: List[str],
+                edges_named: List[Tuple[str, str]], min_meters: int = _MIN_METERS) -> Optional[dict]:
+    """One benchmark case: the building's recording window, gaps filled forward
+    then backward, at most :data:`TARGET_T` evenly spaced samples, constant
+    meters dropped. ``None`` if fewer than ``min_meters`` meters remain."""
+    if not cols:
+        return None
+    sub = df[cols].dropna(how="all")
+    if sub.empty:
+        return None
+    data = sub.ffill().bfill().fillna(0.0).to_numpy(dtype=np.float64)
+    if len(data) > TARGET_T:
+        data = data[_even_index(len(data), TARGET_T)]
+    data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+    keep = data.var(axis=0) > 1e-12
+    if keep.sum() < min_meters:
+        return None
+    names = [c for c, k in zip(cols, keep) if k]
+    index = {n: i for i, n in enumerate(names)}
+    true_edges = {(index[p], index[c]) for p, c in edges_named if p in index and c in index}
+    return {"dataset": dataset, "building": building, "data": data[:, keep],
+            "names": names, "true_edges": true_edges}
+
+
+def _parse_ampds2(d: Path, max_rows: Optional[int]) -> List[dict]:
+    df = _read_numeric(d / "consolidated.csv", max_rows)
+    root = "WHE_P"
+    cols = [root] + [c for c in df.columns if c.endswith("_P") and c != root]
+    edges = [(root, c) for c in _children(_hierarchy(d).get(root))]
+    case = _build_case("AMPds2", "house1", df, cols, edges)
+    return [case] if case else []
+
+
+def _parse_rooted(dataset: str, d: Path, max_rows: Optional[int], tag: str, root_suffix: str,
+                  drop_labels: AbstractSet[str] = frozenset()) -> List[dict]:
+    """Datasets with one root per building: ``<tag><k>_<root_suffix>``, all of the
+    building's columns (sorted) as meters, the root's listed children as edges."""
+    df = _read_numeric(d / "consolidated.csv", max_rows)
+    h = _hierarchy(d)
+    numbers = sorted({int(c[len(tag):].split("_", 1)[0]) for c in df.columns
+                      if c.startswith(tag) and c[len(tag):].split("_", 1)[0].isdigit()})
+    cases = []
+    for k in numbers:
+        prefix, root = f"{tag}{k}_", f"{tag}{k}_{root_suffix}"
+        cols = sorted(c for c in df.columns if c.startswith(prefix))
+        if root not in cols:
+            continue
+        kids = _children(h.get(root))
+        drop = {c for c in kids if h.get(c, {}).get("label", "") in drop_labels}
+        cols = [c for c in cols if c not in drop]
+        case = _build_case(dataset, f"{tag}{k}", df, cols, [(root, c) for c in kids if c not in drop])
+        if case:
+            cases.append(case)
+    return cases
+
+
+def _parse_precon(d: Path, max_rows: Optional[int]) -> List[dict]:
+    df = _read_numeric(d / "consolidated.csv", max_rows)
+    h = _hierarchy(d)
+    cases = []
+    for root in [c for c in df.columns if c.endswith("_aggregate")]:
+        kids = [c for c in _children(h.get(root)) if c in df.columns]
+        if len(kids) < 3:
+            continue
+        case = _build_case("PRECON", root.split("_", 1)[0], df, [root] + kids, [(root, c) for c in kids])
+        if case:
+            cases.append(case)
+    return cases
+
+
+def _parse_uci(d: Path, max_rows: Optional[int]) -> List[dict]:
+    root, kids = "Global_active_power", ["Sub_metering_1", "Sub_metering_2", "Sub_metering_3"]
+    df = _read_numeric(d / "consolidated.csv", max_rows, usecols=[root] + kids)
+    df[root] = df[root] * 1000.0          # kW -> W
+    df[kids] = df[kids] * 60.0            # Wh per minute -> W
+    case = _build_case("UCIPower", "house1", df, [root] + kids, [(root, k) for k in kids])
+    return [case] if case else []
+
+
+def _parse_plegma(d: Path, max_rows: Optional[int]) -> List[dict]:
+    df = _read_numeric(d / "consolidated.csv", max_rows)
+    cases = []
+    for root, node in _hierarchy(d).items():
+        if node.get("type") != "aggregate":
+            continue
+        kids = [c for c in _children(node) if c in df.columns]
+        if len(kids) < _PLEGMA_MIN_SUB:
+            continue
+        both = df[[root] + kids].dropna()
+        if both.empty or float(both[kids].sum(axis=1).mean()) > float(both[root].mean()):
+            continue  # sub-meters exceed the aggregate: not parent >= sum of children
+        case = _build_case("Plegma", root.split("_", 1)[0], df, [root] + kids,
+                           [(root, c) for c in kids], min_meters=_PLEGMA_MIN_SUB + 1)
+        if case:
+            cases.append(case)
+    return cases
+
+
+_PARSERS = {
+    "AMPds2": _parse_ampds2,
+    "REFIT": lambda d, m: _parse_rooted("REFIT", d, m, "house", "Aggregate"),
+    "REDD": lambda d, m: _parse_rooted("REDD", d, m, "house", "main"),
+    "UKDALE": lambda d, m: _parse_rooted("UKDALE", d, m, "bldg", "mains", _UKDALE_DUPLICATE_MAINS),
+    "PRECON": _parse_precon,
+    "UCIPower": _parse_uci,
+    "Plegma": _parse_plegma,
+}
+
+
+# --------------------------------------------------------------------------- #
 # Public API
 # --------------------------------------------------------------------------- #
 def load_real_buildings(dataset_dir: Path, max_rows: Optional[int] = None) -> List[dict]:
@@ -267,8 +441,7 @@ def load_real_buildings(dataset_dir: Path, max_rows: Optional[int] = None) -> Li
 
         # Evenly subsample very long windows.
         if len(sub) > _SUBSAMPLE_CAP:
-            idx = np.unique(np.linspace(0, len(sub) - 1, _SUBSAMPLE_CAP).round().astype(int))
-            sub = sub.iloc[idx]
+            sub = sub.iloc[_even_index(len(sub), _SUBSAMPLE_CAP)]
 
         index = {name: i for i, name in enumerate(local_names)}
         true_edges: Set[Tuple[int, int]] = set()
@@ -315,23 +488,25 @@ def load_real_dataset(root: Path, name: str, max_rows: Optional[int] = None) -> 
     name:
         Short dataset key, e.g. ``"REDD"`` (see :data:`DATASETS`).
     max_rows:
-        Forwarded to :func:`load_real_buildings`.
+        If given, only the first ``max_rows`` CSV rows are read. Forwarded to the
+        dataset's benchmark parser, or to :func:`load_real_buildings` for
+        datasets outside the benchmark.
     """
     if name not in DATASETS:
         raise KeyError(f"Unknown dataset {name!r}; known: {sorted(DATASETS)}")
-    return load_real_buildings(Path(root) / DATASETS[name], max_rows=max_rows)
+    dataset_dir = Path(root) / DATASETS[name]
+    if name in _PARSERS:
+        return _PARSERS[name](dataset_dir, max_rows)
+    return load_real_buildings(dataset_dir, max_rows=max_rows)
 
 
 def apply_apriori_filter(name: str, buildings: List[dict]) -> List[dict]:
-    """Apply paper-specific a-priori building filters.
+    """Apply the paper's a-priori dataset rules.
 
-    * RAE: keep only building ``house1`` (house2's mains are sub-panel feeds,
-      not a clean whole-house aggregate).
-    * UKDALE: drop building ``bldg1`` (excluded a priori).
-    * Any other dataset: returned unchanged.
+    The benchmark parsers already apply the per-building rules (see the module
+    docstring). RAE is excluded entirely: both houses have a computed mains (the
+    exact sum of their circuits), so there is no physical whole-house root.
     """
     if name == "RAE":
-        return [b for b in buildings if b["building"] == "house1"]
-    if name == "UKDALE":
-        return [b for b in buildings if b["building"] != "bldg1"]
+        return []
     return buildings

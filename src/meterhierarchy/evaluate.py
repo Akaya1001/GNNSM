@@ -158,6 +158,10 @@ def main_baselines(argv: Optional[List[str]] = None) -> None:
     evaluate(Path(args.data), split, None, _parse_baselines(args.baselines), device, args.limit)
 
 
+# Baselines see the real series evenly subsampled to this length (paper, Table 13).
+BASELINE_T = 2000
+
+
 def evaluate_real(
     data_root: Path,
     dataset_names: List[str],
@@ -168,10 +172,12 @@ def evaluate_real(
 ) -> Dict[str, Dict[str, float]]:
     """Evaluate methods on the paper's real datasets (mean F1 over buildings).
 
-    Applies the a-priori rooted-tree filter (RAE house1 only; UK-DALE drops
-    building 1) before scoring.
+    Follows the paper's protocol (Tables 11 and 13): the benchmark parsers in
+    :mod:`meterhierarchy.data.real_io` apply the a-priori dataset rules, the GNN
+    sees the full series (at most 35,040 samples) and every baseline sees it
+    evenly subsampled to :data:`BASELINE_T` samples.
     """
-    from .data.real_io import load_real_dataset, apply_apriori_filter
+    from .data.real_io import load_real_dataset, apply_apriori_filter, _even_index
 
     models = norm = None
     pe_dim = 8
@@ -187,6 +193,9 @@ def evaluate_real(
         except Exception as exc:  # noqa: BLE001
             print(f"  [skip {name}] {exc}")
             continue
+        if not buildings:
+            print(f"  [skip {name}] no case passes the paper's a-priori rules")
+            continue
         for m in methods:
             f1s = []
             for b in buildings:
@@ -200,7 +209,10 @@ def evaluate_real(
                         apply_norm([feat], norm)
                         S = ensemble_predict(models, feat, device)
                     else:
-                        S = get_scorer(m)(b["data"])
+                        X = b["data"]
+                        if len(X) > BASELINE_T:
+                            X = X[_even_index(len(X), BASELINE_T)]
+                        S = get_scorer(m)(X)
                     f1, _, _ = evaluate_f1(find_best_tree(N, S), b["true_edges"])
                 except Exception as e:  # noqa: BLE001
                     _warn_scorer_failure(m, e)
@@ -208,12 +220,13 @@ def evaluate_real(
                 f1s.append(f1)
             table[m][name] = _mean(f1s)
 
-    header = "Method".ljust(11) + "".join(f"{n:>9}" for n in dataset_names) + f"{'MEAN':>9}"
+    shown = [n for n in dataset_names if any(n in table[m] for m in methods)]
+    header = "Method".ljust(11) + "".join(f"{n:>9}" for n in shown) + f"{'MEAN':>9}"
     print(f"\nReal-data evaluation (mean F1 over buildings; max_rows={max_rows})")
     print(header)
     print("-" * len(header))
     for m in methods:
-        vals = [table[m].get(n, 0.0) for n in dataset_names]
+        vals = [table[m].get(n, 0.0) for n in shown]
         mean = sum(vals) / len(vals) if vals else 0.0
         print(m.ljust(11) + "".join(f"{v:>9.3f}" for v in vals) + f"{mean:>9.3f}")
     return table
@@ -221,6 +234,7 @@ def evaluate_real(
 
 _PALETTE = ["1f77b4", "ff7f0e", "2ca02c", "d62728", "9467bd", "8c564b", "e377c2", "17becf"]
 _METHOD_ORDER = ["GNN", "CL", "PC", "Granger", "HL", "NOTEARS", "DYNOTEARS", "AVICI"]
+_DISPLAY = {"UKDALE": "UK-DALE", "UCIPower": "UCI Power"}  # dataset names as in the paper
 
 
 def emit_latex(
@@ -238,6 +252,9 @@ def emit_latex(
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    # datasets without any evaluated case (e.g. RAE, excluded a priori) get no column
+    dataset_names = [d for d in dataset_names
+                     if any(d in table[m] for m in table) or (gnn_ref and d in gnn_ref)]
 
     rows: Dict[str, List[float]] = {}
     if gnn_ref:
@@ -257,12 +274,13 @@ def emit_latex(
     T = [
         r"\begin{table}[pos=H]", r"\centering",
         r"\caption{Edge-level $F_1$ of the GNN and baselines on the real datasets "
-        r"(mean over buildings; a-priori rooted-tree filter)." + (" " + note if note else "") + r"}",
+        r"(mean over buildings; GNN on the full series, baselines on 2\,000 evenly "
+        r"spaced samples)." + (" " + note if note else "") + r"}",
         r"\label{tab:real-eval-baselines}",
         r"\resizebox{\textwidth}{!}{%",
         r"\begin{tabular}{l" + "r" * ncol + "r}",
         r"\toprule",
-        "Method & " + " & ".join(dataset_names) + r" & MEAN \\",
+        "Method & " + " & ".join(_DISPLAY.get(d, d) for d in dataset_names) + r" & MEAN \\",
         r"\midrule",
     ]
     for m in methods:
@@ -298,12 +316,13 @@ def main_real(argv: Optional[List[str]] = None) -> None:
     """Entry point for ``mh-evaluate-real``."""
     p = argparse.ArgumentParser(description="Evaluate GNN/baselines on the paper's real datasets.")
     p.add_argument("--data-root", type=str, required=True, help="path to RealDataClean/")
-    p.add_argument("--datasets", type=str, default="AMPds2,REFIT,REDD,UKDALE,RAE")
+    p.add_argument("--datasets", type=str, default="AMPds2,REFIT,REDD,UKDALE,PRECON,UCIPower,Plegma")
     p.add_argument("--gnn", type=str, default=None)
     p.add_argument("--baselines", type=str, default="", help="comma list or 'all'")
     p.add_argument("--avici", type=str, default=None, help="AVICI checkpoint (sets MH_AVICI_CKPT)")
     p.add_argument("--device", type=str, default="auto", choices=["auto", "cuda", "dml", "cpu"])
-    p.add_argument("--max-rows", type=int, default=4000, help="rows read per dataset (<0 = full, subsample 5000)")
+    p.add_argument("--max-rows", type=int, default=-1,
+                   help="rows read per dataset (<0 = full series as in the paper; e.g. 4000 for a quick check)")
     p.add_argument("--emit-latex", type=str, default=None, help="write LaTeX table + TikZ figure to this dir")
     p.add_argument("--gnn-ref", type=str, default=None, help="GNN per-dataset F1, e.g. 'AMPds2:0.855,REFIT:0.885'")
     p.add_argument("--note", type=str, default="", help="extra sentence appended to the emitted table caption")

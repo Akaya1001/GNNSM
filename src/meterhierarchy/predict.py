@@ -4,7 +4,7 @@ Inference only, no ground truth required. Each CSV must have one time-like colum
 (dropped automatically) and one numeric column per meter, the column header being
 the meter id. Constant or empty meter columns are discarded, mirroring the paper's
 preprocessing. The model was trained on 15-min data; markedly different sampling
-rates may reduce accuracy (see RUN_PRETRAINED.md).
+rates may reduce accuracy (see "Predict on your own data" in the README).
 """
 from __future__ import annotations
 

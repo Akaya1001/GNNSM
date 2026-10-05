@@ -21,8 +21,8 @@ matrix into a valid rooted tree, so all methods are compared on equal footing.
 ## Installation
 
 ```bash
-git clone <your-remote> meter-hierarchy-gnn
-cd meter-hierarchy-gnn
+git clone https://github.com/Akaya1001/GNNSM.git
+cd GNNSM
 python -m venv .venv && . .venv/Scripts/activate    # Windows; use bin/activate on Linux
 pip install -e .[dev]
 ```
@@ -61,7 +61,8 @@ python -m pytest tests/            # or: python tests/run_all.py
 
 # 3. Train (configs/*.yaml document the built-in defaults; they are not read by code)
 python scripts/train_gnn.py   --data data/synth --out checkpoints/gnn_ensemble.pt
-python scripts/train_avici.py --data data/synth --out checkpoints/avici.pt
+python scripts/train_avici.py --data data/synth --out checkpoints/avici.pt \
+    --dim 96 --layers 6 --heads 6 --epochs 25   # the paper's AVICI setting (Table 13)
 
 # 4. Evaluate the GNN + all baselines (incl. AVICI) on a synthetic dataset
 python scripts/run_baselines.py --data data/synth
@@ -69,15 +70,28 @@ python scripts/evaluate.py      --data data/synth --gnn checkpoints/gnn_ensemble
 
 # 5. Evaluate on the paper's REAL datasets (zero-shot transfer)
 python scripts/evaluate_real.py --data-root "<path>/RealDataClean" \
-    --datasets AMPds2,REFIT,REDD,UKDALE,RAE --baselines CL,AVICI --avici checkpoints/avici.pt --gnn checkpoints/gnn_ensemble.pt
+    --datasets AMPds2,REFIT,REDD,UKDALE,PRECON,UCIPower,Plegma --baselines all --avici checkpoints/avici.pt --gnn checkpoints/gnn_ensemble.pt
 ```
 
 The real datasets live outside the repo in numbered folders, e.g.
 `RealDataClean/07_AMPds2/{consolidated.csv,hierarchy.json}` (`06_REFIT`,
-`19_REDD`, `18_UKDALE`, `09_RAE`, `08_PRECON`); the short-name → folder mapping
-lives in `meterhierarchy.data.real_io.DATASETS`. The loader applies the same
-a-priori rooted-tree filter as the paper (RAE: `house1` only; UK-DALE: drop
-building 1).
+`19_REDD`, `18_UKDALE`, `08_PRECON`, `05_UCI_Power`, `10_Plegma`); the
+short-name → folder mapping lives in `meterhierarchy.data.real_io.DATASETS`.
+The benchmark parsers follow the paper's protocol (Sec. 5.1.2, Tables 11 and 13):
+
+* one case per building, rooted at its physical whole-house meter with at least
+  three sub-meters (N ≥ 4); constant sensors are dropped;
+* UK-DALE: all five buildings; the duplicate whole-house (sound-card) meter that
+  the metadata lists under the mains of buildings 1, 2 and 5 is removed;
+* UCI Power: `Global_active_power` (kW → W) with `Sub_metering_1..3`
+  (Wh/min → W); the computed `remainder` is not a meter;
+* Plegma: houses with at least three sub-meters whose sum does not exceed the
+  aggregate (houses 1, 3, 4, 7, 11);
+* RAE is excluded: its mains is the computed sum of its circuits.
+
+The GNN sees the full series (at most 35,040 samples); every baseline sees it
+evenly subsampled to 2,000 samples. Pass `--max-rows 4000` for a quick check on
+the first 4,000 rows only.
 
 ### One-command pipeline
 
@@ -108,6 +122,7 @@ python scripts/predict.py --gnn checkpoints/gnn_ensemble.pt --csv my_meters.csv 
 src/meterhierarchy/
   model/        GNN (gnn.py) + Edmonds/Chu-Liu decoder (decode.py)
   features/     58 pairwise + 15 node features + Laplacian positional encodings
+                (pure NumPy; the paper's runs computed them with Numba kernels)
   data/         synthetic case generator + case I/O (parquet + hierarchy.json)
   baselines/    score(data, names) -> (N, N) for CL, PC, Granger, HL, NOTEARS, DYNOTEARS, AVICI
   avici/        the AVICI model, its data adapter, and training loop

@@ -15,8 +15,8 @@ split  = "test"          # evaluation split (synthetic; falls back to val/train)
 # Used when source = "real" (zero-shot transfer: train stays on [data].path).
 [data.real]
 root     = "path/to/RealDataClean"
-datasets = ["AMPds2", "REFIT", "REDD", "UKDALE", "RAE"]
-max_rows = 4000          # -1 = full series (evenly subsampled to 5000)
+datasets = ["AMPds2", "REFIT", "REDD", "UKDALE", "PRECON", "UCIPower", "Plegma"]
+max_rows = -1            # -1 = full series as in the paper; e.g. 4000 for a quick check
 
 [generate]
 n    = 200               # train cases (val/test derived from split_ratio)
